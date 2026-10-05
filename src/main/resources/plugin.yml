@@ -1,0 +1,17 @@
+name: NordPhantoms
+version: '1.0.0'
+main: com.nordfjell.nordphantoms.NordPhantomsPlugin
+api-version: '26.2'
+author: Nord Fjell
+description: Nord Fjell phantom spawning, passive behavior, silence, and End-base protection.
+
+commands:
+  nordphantoms:
+    description: Reload NordPhantoms configuration.
+    usage: /nordphantoms reload
+    permission: nordphantoms.admin
+
+permissions:
+  nordphantoms.admin:
+    description: Allows reloading NordPhantoms.
+    default: op
