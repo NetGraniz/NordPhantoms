@@ -19,11 +19,15 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
-import org.bukkit.event.world.ChunkLoadEvent;
+import org.bukkit.event.world.EntitiesLoadEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.projectiles.ProjectileSource;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import io.papermc.paper.ServerBuildInfo;
+import net.kyori.adventure.key.Key;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
@@ -32,37 +36,42 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
-    private final Map<UUID, MovementState> movementStates = new HashMap<>();
+    private final Map<UUID, MovementState> movementStates = new ConcurrentHashMap<>();
+    private final Map<UUID, Phantom> phantoms = new ConcurrentHashMap<>();
+    private final Map<UUID, ScheduledTask> movementTasks = new ConcurrentHashMap<>();
+    private final Map<UUID, ScheduledTask> spawnTasks = new ConcurrentHashMap<>();
+    private final PhantomPositions positions = new PhantomPositions();
+    private boolean folia;
 
     private NamespacedKey angryKey;
-    private BukkitTask spawnTask;
-    private BukkitTask movementTask;
 
-    private boolean debug;
-    private long spawnIntervalTicks;
-    private double spawnChance;
-    private int maximumNearbyPhantoms;
-    private double phantomCountRadius;
-    private double minimumSpawnDistance;
-    private double maximumSpawnDistance;
-    private int spawnAttempts;
-    private int spawnHeight;
-    private int baseCheckRadius;
-    private long movementIntervalTicks;
-    private int chorusAvoidanceRadius;
-    private double stuckDistance;
-    private int stuckChecks;
+    private volatile boolean debug;
+    private volatile long spawnIntervalTicks;
+    private volatile double spawnChance;
+    private volatile int maximumNearbyPhantoms;
+    private volatile double phantomCountRadius;
+    private volatile double minimumSpawnDistance;
+    private volatile double maximumSpawnDistance;
+    private volatile int spawnAttempts;
+    private volatile int spawnHeight;
+    private volatile int baseCheckRadius;
+    private volatile long movementIntervalTicks;
+    private volatile int chorusAvoidanceRadius;
+    private volatile double stuckDistance;
+    private volatile int stuckChecks;
 
     @Override
     public void onEnable() {
         angryKey = new NamespacedKey(this, "angry");
+        folia = ServerBuildInfo.buildInfo().isBrandCompatible(Key.key("papermc","folia"));
         saveDefaultConfig();
         loadSettings();
         getServer().getPluginManager().registerEvents(this, this);
         startTasks();
-        Bukkit.getScheduler().runTask(this, this::initializeLoadedPhantoms);
+        Bukkit.getGlobalRegionScheduler().execute(this, this::initializeLoadedPhantoms);
         getLogger().info("NordPhantoms enabled: Overworld spawning disabled; End phantoms are passive until attacked.");
     }
 
@@ -70,6 +79,7 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
     public void onDisable() {
         cancelTasks();
         movementStates.clear();
+        phantoms.clear(); positions.clear();
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -87,6 +97,7 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
 
         if (environment == World.Environment.THE_END) {
             makePassive(phantom);
+            track(phantom);
         }
     }
 
@@ -116,22 +127,23 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        Bukkit.getScheduler().runTask(this, () -> {
+        phantom.getScheduler().execute(this, () -> {
             if (!phantom.isValid() || phantom.isDead()) {
                 return;
             }
             makeAngry(phantom, attacker);
-        });
+        },null,1L);
     }
 
     @EventHandler
-    public void onChunkLoad(ChunkLoadEvent event) {
+    public void onChunkLoad(EntitiesLoadEvent event) {
         if (event.getWorld().getEnvironment() != World.Environment.THE_END) {
             return;
         }
-        for (Entity entity : event.getChunk().getEntities()) {
+        for (Entity entity : event.getEntities()) {
             if (entity instanceof Phantom phantom) {
                 restoreState(phantom);
+                track(phantom);
             }
         }
     }
@@ -158,8 +170,10 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
     private void makeAngry(Phantom phantom, Player attacker) {
         phantom.getPersistentDataContainer().set(angryKey, PersistentDataType.BYTE, (byte) 1);
         phantom.setSilent(false);
-        phantom.setTarget(attacker);
-        phantom.setAnchorLocation(attacker.getLocation());
+        if (Bukkit.isOwnedByCurrentRegion(attacker)) {
+            phantom.setTarget(attacker);
+            phantom.setAnchorLocation(attacker.getLocation());
+        }
         movementStates.remove(phantom.getUniqueId());
         debug("Phantom " + phantom.getUniqueId() + " was provoked by " + attacker.getName());
     }
@@ -178,51 +192,77 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
     }
 
     private void initializeLoadedPhantoms() {
+        // Folia startup loads entities through EntitiesLoadEvent. Enumerating foreign
+        // regions is forbidden; hot-loading this plugin is intentionally unsupported.
+        if (folia) return;
         for (World world : Bukkit.getWorlds()) {
             if (world.getEnvironment() != World.Environment.THE_END) {
                 continue;
             }
             for (Phantom phantom : world.getEntitiesByClass(Phantom.class)) {
                 restoreState(phantom);
+                track(phantom);
             }
         }
     }
 
     private void startTasks() {
         cancelTasks();
-        spawnTask = Bukkit.getScheduler().runTaskTimer(
-                this, this::runSpawnCycle, spawnIntervalTicks, spawnIntervalTicks);
-        movementTask = Bukkit.getScheduler().runTaskTimer(
-                this, this::runMovementCycle, movementIntervalTicks, movementIntervalTicks);
+        for (Player player : Bukkit.getOnlinePlayers()) startSpawnTask(player);
+        for (Phantom phantom : phantoms.values()) startMovementTask(phantom);
     }
 
     private void cancelTasks() {
-        if (spawnTask != null) {
-            spawnTask.cancel();
-            spawnTask = null;
-        }
-        if (movementTask != null) {
-            movementTask.cancel();
-            movementTask = null;
+        spawnTasks.values().forEach(ScheduledTask::cancel); spawnTasks.clear();
+        movementTasks.values().forEach(ScheduledTask::cancel); movementTasks.clear();
+    }
+    @EventHandler public void join(PlayerJoinEvent event) { startSpawnTask(event.getPlayer()); }
+    @EventHandler public void quit(PlayerQuitEvent event) {
+        ScheduledTask task=spawnTasks.remove(event.getPlayer().getUniqueId());
+        if (task!=null) task.cancel();
+    }
+    private void startSpawnTask(Player player) {
+        UUID id=player.getUniqueId();
+        ScheduledTask previous=spawnTasks.remove(id);if(previous!=null)previous.cancel();
+        ScheduledTask task=player.getScheduler().runAtFixedRate(this,ignored -> runSpawnCycle(player),
+            null,spawnIntervalTicks,spawnIntervalTicks);
+        if(task!=null)spawnTasks.put(id,task);
+    }
+    private void track(Phantom phantom) {
+        UUID id=phantom.getUniqueId();
+        if(phantoms.putIfAbsent(id,phantom)==null)startMovementTask(phantom);
+    }
+    private void forget(UUID id,Phantom phantom) {
+        if(phantoms.remove(id,phantom)) {
+            positions.remove(id);movementStates.remove(id);
+            ScheduledTask task=movementTasks.remove(id);if(task!=null)task.cancel();
         }
     }
-
-    private void runSpawnCycle() {
+    private void startMovementTask(Phantom phantom) {
+        UUID id=phantom.getUniqueId();
+        ScheduledTask task=phantom.getScheduler().runAtFixedRate(this,ignored -> {
+            if(!phantom.isValid()||phantom.isDead()){forget(id,phantom);return;}
+            Location position=phantom.getLocation();
+            positions.update(id,new PhantomPositions.Position(position.getWorld().getUID(),position.getX(),position.getY(),position.getZ()));
+            steerAroundChorus(phantom);recoverIfStuck(phantom);
+        },() -> forget(id,phantom),movementIntervalTicks,movementIntervalTicks);
+        if(task!=null)movementTasks.put(id,task);else forget(id,phantom);
+    }
+    private void runSpawnCycle(Player player) {
         ThreadLocalRandom random = ThreadLocalRandom.current();
-        for (Player player : Bukkit.getOnlinePlayers()) {
             if (!player.isValid() || player.isDead()
                     || player.getWorld().getEnvironment() != World.Environment.THE_END
                     || random.nextDouble() > spawnChance) {
-                continue;
+                return;
             }
             if (countNearbyPhantoms(player.getLocation()) >= maximumNearbyPhantoms) {
-                continue;
+                return;
             }
 
             Location location = findNaturalSpawnLocation(player, random);
             if (location == null) {
                 debug("No base-safe phantom spawn location found near " + player.getName());
-                continue;
+                return;
             }
 
             Phantom phantom = player.getWorld().spawn(location, Phantom.class,
@@ -232,18 +272,15 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
                         makePassive(spawned);
                     });
             debug("Spawned passive phantom at " + format(phantom.getLocation()));
-        }
+            Location position=phantom.getLocation();
+            positions.update(phantom.getUniqueId(),new PhantomPositions.Position(position.getWorld().getUID(),position.getX(),position.getY(),position.getZ()));
     }
 
     private int countNearbyPhantoms(Location center) {
+        if(folia)return positions.count(center.getWorld().getUID(),center.getX(),center.getY(),center.getZ(),phantomCountRadius);
         int count = 0;
-        for (Entity entity : center.getWorld().getNearbyEntities(
-                center, phantomCountRadius, phantomCountRadius, phantomCountRadius,
-                candidate -> candidate instanceof Phantom)) {
-            if (entity instanceof Phantom) {
-                count++;
-            }
-        }
+        for(Entity entity:center.getWorld().getNearbyEntities(center,phantomCountRadius,phantomCountRadius,phantomCountRadius,
+            candidate -> candidate instanceof Phantom))count++;
         return count;
     }
 
@@ -253,11 +290,12 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
 
         for (int attempt = 0; attempt < spawnAttempts; attempt++) {
             double angle = random.nextDouble(Math.PI * 2.0);
-            double distance = random.nextDouble(minimumSpawnDistance, maximumSpawnDistance);
+            double minimum = minimumSpawnDistance;
+            double distance = random.nextDouble(minimum, Math.max(minimum + 1.0,maximumSpawnDistance));
             int x = (int) Math.floor(origin.getX() + Math.cos(angle) * distance);
             int z = (int) Math.floor(origin.getZ() + Math.sin(angle) * distance);
 
-            if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+            if (!Bukkit.isOwnedByCurrentRegion(world,x >> 4,z >> 4) || !world.isChunkLoaded(x >> 4, z >> 4)) {
                 continue;
             }
 
@@ -302,7 +340,7 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
 
         for (int x = centerX - baseCheckRadius; x <= centerX + baseCheckRadius; x++) {
             for (int z = centerZ - baseCheckRadius; z <= centerZ + baseCheckRadius; z++) {
-                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                if (!Bukkit.isOwnedByCurrentRegion(world,x >> 4,z >> 4) || !world.isChunkLoaded(x >> 4, z >> 4)) {
                     return true;
                 }
                 for (int y = minY; y <= maxY; y++) {
@@ -330,6 +368,8 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
         for (int ox = -2; ox <= 2; ox++) {
             for (int oy = -2; oy <= 2; oy++) {
                 for (int oz = -2; oz <= 2; oz++) {
+                    if(!Bukkit.isOwnedByCurrentRegion(world,(x+ox)>>4,(z+oz)>>4)
+                            || !world.isChunkLoaded((x+ox)>>4,(z+oz)>>4))return false;
                     if (!world.getBlockAt(x + ox, y + oy, z + oz).getType().isAir()) {
                         return false;
                     }
@@ -337,30 +377,6 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
             }
         }
         return true;
-    }
-
-    private void runMovementCycle() {
-        Map<UUID, Boolean> seen = new HashMap<>();
-        for (World world : Bukkit.getWorlds()) {
-            if (world.getEnvironment() != World.Environment.THE_END) {
-                continue;
-            }
-            for (Phantom phantom : world.getEntitiesByClass(Phantom.class)) {
-                if (!phantom.isValid() || phantom.isDead()) {
-                    continue;
-                }
-                seen.put(phantom.getUniqueId(), Boolean.TRUE);
-                steerAroundChorus(phantom);
-                recoverIfStuck(phantom);
-            }
-        }
-
-        Iterator<UUID> iterator = movementStates.keySet().iterator();
-        while (iterator.hasNext()) {
-            if (!seen.containsKey(iterator.next())) {
-                iterator.remove();
-            }
-        }
     }
 
     private void steerAroundChorus(Phantom phantom) {
@@ -393,6 +409,8 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
         for (int x = -radius; x <= radius; x++) {
             for (int y = -radius; y <= radius; y++) {
                 for (int z = -radius; z <= radius; z++) {
+                    if(!Bukkit.isOwnedByCurrentRegion(world,(cx+x)>>4,(cz+z)>>4)
+                            || !world.isChunkLoaded((cx+x)>>4,(cz+z)>>4))continue;
                     Material type = world.getBlockAt(cx + x, cy + y, cz + z).getType();
                     if (type != Material.CHORUS_PLANT && type != Material.CHORUS_FLOWER) {
                         continue;
@@ -484,9 +502,12 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
         if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            loadSettings();
-            startTasks();
-            sender.sendMessage("NordPhantoms configuration reloaded.");
+            Bukkit.getGlobalRegionScheduler().execute(this,() -> {
+                loadSettings();startTasks();
+                if(sender instanceof Player player)player.getScheduler().execute(this,
+                    () -> player.sendMessage("NordPhantoms configuration reloaded."),null,1L);
+                else sender.sendMessage("NordPhantoms configuration reloaded.");
+            });
         } else {
             sender.sendMessage("Usage: /nordphantoms reload");
         }

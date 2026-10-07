@@ -9,6 +9,6 @@ if ($QueueProject) {
 }
 & $MavenCommand -B -ntp -f (Join-Path $PSScriptRoot 'pom.xml') clean verify
 if ($LASTEXITCODE -ne 0) { throw 'NordPhantoms build or tests failed.' }
-$jar = Join-Path $PSScriptRoot 'target/NordPhantoms-1.0.1.jar'
+$jar = Join-Path $PSScriptRoot 'target/NordPhantoms-1.1.0.jar'
 if (-not (Test-Path -LiteralPath $jar -PathType Leaf)) { throw 'Expected release JAR missing.' }
 Get-FileHash -LiteralPath $jar -Algorithm SHA256

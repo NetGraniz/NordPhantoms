@@ -1,9 +1,11 @@
-# NordPhantoms
+# NordPhantoms 1.1.0
+
+One release JAR for Paper 26.2 and Folia 26.2: [compatibility notes](FOLIA.md).
 
 > Release build and installation requirements: see [BUILDING.md](BUILDING.md).
 > Older local paths below describe historical test fixtures, not the release build.
 
-Small Paper 26.2 plugin implementing Nord Fjell's phantom rules:
+Small Paper/Folia 26.2 plugin implementing Nord Fjell's phantom rules:
 
 - no phantom spawning in the Overworld;
 - custom spawning over natural terrain in The End, away from player bases;

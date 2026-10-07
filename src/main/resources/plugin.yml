@@ -2,6 +2,7 @@ name: NordPhantoms
 version: '${project.version}'
 main: com.nordfjell.nordphantoms.NordPhantomsPlugin
 api-version: '26.2'
+folia-supported: true
 author: Nord Fjell
 description: Nord Fjell phantom spawning, passive behavior, silence, and End-base protection.
 
