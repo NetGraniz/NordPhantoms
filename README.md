@@ -1,19 +1,31 @@
 # NordPhantoms 1.1.0
 
-One release JAR for Paper 26.2 and Folia 26.2: [compatibility notes](FOLIA.md).
+Phantom spawning and behavior for Paper 26.2 and Folia 26.2. One JAR supports both platforms on Java 25.
 
-> Release build and installation requirements: see [BUILDING.md](BUILDING.md).
-> Older local paths below describe historical test fixtures, not the release build.
+## Behavior
 
-Small Paper/Folia 26.2 plugin implementing Nord Fjell's phantom rules:
+- Prevents phantom spawning in the Overworld.
+- Adds custom spawning over natural End terrain, away from player bases.
+- Keeps phantoms passive and silent until a player attacks them.
+- Saves aggression across chunk unloads and server restarts.
+- Avoids chorus trees and helps stuck phantoms recover.
 
-- no phantom spawning in the Overworld;
-- custom spawning over natural terrain in The End, away from player bases;
-- passive and silent until attacked by a player;
-- persistent aggression state across chunk unloads and restarts;
-- lightweight chorus-tree avoidance and stuck recovery.
+## Configuration
 
-Admin command: `/nordphantoms reload` (`nordphantoms.admin`).
+Edit `plugins/NordPhantoms/config.yml`, then run `/nordphantoms reload`.
 
-The behavior was inspired by MightyFinger77's open-source PassivePhantoms project:
-https://github.com/MightyFinger77/PassivePhantoms
+## Permissions
+
+| Permission | Allows | Default |
+| --- | --- | --- |
+| `nordphantoms.admin` | `/nordphantoms reload` | Operators |
+
+Normal spawning and phantom behavior do not require player permissions.
+
+## Build and installation
+
+Use Maven 3.9+ and JDK 25. See [BUILDING.md](BUILDING.md) for build instructions and [FOLIA.md](FOLIA.md) for platform support. Install the release JAR on a stopped server.
+
+## Attribution
+
+The passive behavior was inspired by MightyFinger77's open-source PassivePhantoms: https://github.com/MightyFinger77/PassivePhantoms
