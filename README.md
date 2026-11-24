@@ -25,3 +25,7 @@ Normal spawning and phantom behavior do not require player permissions.
 ## Build and installation
 
 Use Maven 3.9+ and JDK 25. See [BUILDING.md](BUILDING.md) for build instructions and [FOLIA.md](FOLIA.md) for platform support. Install the release JAR on a stopped server.
+
+## License
+
+Current development on `main` is licensed under [GNU GPL v3.0 only](LICENSE). The latest published release remains available under the MIT License stated on its release page.
