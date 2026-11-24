@@ -1,0 +1,23 @@
+debug: false
+
+spawn:
+  # One roll is made for every player currently in The End.
+  interval-ticks: 200
+  chance: 1.0
+  maximum-near-player: 8
+  count-radius: 128.0
+
+  # Spawning away from the player prevents phantoms from appearing inside End bases.
+  minimum-distance: 48.0
+  maximum-distance: 96.0
+  attempts: 16
+  height-above-surface: 18
+
+  # A candidate is rejected when non-natural End blocks are found in this radius.
+  base-check-radius: 8
+
+movement:
+  interval-ticks: 100
+  chorus-radius: 3
+  stuck-distance: 1.0
+  stuck-checks: 3
