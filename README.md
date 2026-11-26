@@ -1,4 +1,4 @@
-# NordPhantoms 1.1.0
+# NordPhantoms 1.1.1
 
 Phantom spawning and behavior for Paper 26.2 and Folia 26.2. One JAR supports both platforms on Java 25.
 

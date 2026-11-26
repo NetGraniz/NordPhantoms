@@ -8,7 +8,7 @@ folder, private configuration, prebuilt old plugin, or machine-specific path is 
 
 From this project's root, run `mvn clean verify`, or on PowerShell run
 `./build.ps1`. The wrapper accepts `-MavenCommand /path/to/mvn`.
-The JAR is `target/NordPhantoms-1.1.0.jar`.
+The JAR is `target/NordPhantoms-1.1.1.jar`.
 
 
 Only plugin metadata resources are filtered for the release version. Configuration

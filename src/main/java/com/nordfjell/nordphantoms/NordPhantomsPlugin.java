@@ -31,8 +31,6 @@ import net.kyori.adventure.key.Key;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -278,10 +276,8 @@ public final class NordPhantomsPlugin extends JavaPlugin implements Listener {
 
     private int countNearbyPhantoms(Location center) {
         if(folia)return positions.count(center.getWorld().getUID(),center.getX(),center.getY(),center.getZ(),phantomCountRadius);
-        int count = 0;
-        for(Entity entity:center.getWorld().getNearbyEntities(center,phantomCountRadius,phantomCountRadius,phantomCountRadius,
-            candidate -> candidate instanceof Phantom))count++;
-        return count;
+        return center.getWorld().getNearbyEntities(center,phantomCountRadius,phantomCountRadius,phantomCountRadius,
+            candidate -> candidate instanceof Phantom).size();
     }
 
     private Location findNaturalSpawnLocation(Player player, ThreadLocalRandom random) {

@@ -4,7 +4,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.nordfjell</groupId>
   <artifactId>nordphantoms</artifactId>
-  <version>1.1.0</version>
+  <version>1.1.1</version>
   <name>NordPhantoms</name>
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
@@ -16,18 +16,17 @@
   </repositories>
   <dependencies>
     <dependency><groupId>io.papermc.paper</groupId><artifactId>paper-api</artifactId><version>26.2.build.129-stable</version><scope>provided</scope></dependency>
-    <dependency><groupId>org.yaml</groupId><artifactId>snakeyaml</artifactId><version>2.6</version><scope>provided</scope></dependency>
   </dependencies>
   <build>
     <finalName>NordPhantoms-${project.version}</finalName>
     <resources>
       <resource>
         <directory>src/main/resources</directory><filtering>false</filtering>
-        <excludes><exclude>plugin.yml</exclude><exclude>velocity-plugin.json</exclude></excludes>
+        <excludes><exclude>plugin.yml</exclude></excludes>
       </resource>
       <resource>
         <directory>src/main/resources</directory><filtering>true</filtering>
-        <includes><include>plugin.yml</include><include>velocity-plugin.json</include></includes>
+        <includes><include>plugin.yml</include></includes>
       </resource>
     </resources>
     <plugins>

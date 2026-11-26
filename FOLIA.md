@@ -1,6 +1,6 @@
-# Paper / Folia compatibility — 1.1.0
+# Paper / Folia compatibility — 1.1.1
 
-Use `NordPhantoms-1.1.0.jar` with JDK 25 on Paper 26.2 or Folia 26.2.
+Use `NordPhantoms-1.1.1.jar` with JDK 25 on Paper 26.2 or Folia 26.2.
 
 Player-owned spawn timers and phantom-owned movement timers replace global entity scans. EntitiesLoadEvent restores loaded End phantoms. Folia density checks use spatially indexed snapshots updated at the movement interval, so density is approximate between updates; Paper retains live nearby-entity counts. Candidates crossing unowned or unloaded chunks are skipped without forced loads or foreign reads. Normal startup and plugin reload are supported; hot-loading is not. Aggression PDC and configuration values are unchanged.
 
